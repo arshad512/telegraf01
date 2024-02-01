@@ -4,291 +4,144 @@ package lustre2
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
-
+	"github.com/stretchr/testify/require"
 	"github.com/influxdata/toml"
 	"github.com/influxdata/toml/ast"
-	"github.com/stretchr/testify/require"
-
 	"github.com/influxdata/telegraf/testutil"
 )
 
-// Set config file variables to point to fake directory structure instead of /proc?
+/*
+ * Description: Read testcases/<testname> folder and then read <input.out> file
+ *
+ * @t: Reference to testutil
+ * @parentFolderName: Parent folder under plugins/input. (testcases)
+ * @folderName: Folder holding input data of the test case
+ * @inputFile: Name of file holding test input data
+ *
+ * Output: On success return data read from input file
+ *         On Failure exit program
+ */
+func ReadDir(t *testing.T, parentFolderName string, folderName string,
+	     inputFile string,) ([]byte) {
+	testpath := filepath.Join(parentFolderName, folderName)
+	_, err := os.ReadDir(testpath)
+	require.NoError(t, err)
+	data, err := os.ReadFile(testpath + "/" + inputFile)
+	require.NoError(t, err)
+	return data
+}
 
-const obdfilterProcContents = `snapshot_time             1438693064.430544 secs.usecs
-read_bytes                203238095 samples [bytes] 4096 1048576 78026117632000
-write_bytes               71893382 samples [bytes] 1 1048576 15201500833981
-get_info                  1182008495 samples [reqs]
-set_info_async            2 samples [reqs]
-connect                   1117 samples [reqs]
-reconnect                 1160 samples [reqs]
-disconnect                1084 samples [reqs]
-statfs                    3575885 samples [reqs]
-create                    698 samples [reqs]
-destroy                   3190060 samples [reqs]
-setattr                   605647 samples [reqs]
-punch                     805187 samples [reqs]
-sync                      6608753 samples [reqs]
-preprw                    275131477 samples [reqs]
-commitrw                  275131477 samples [reqs]
-quotactl                  229231 samples [reqs]
-ping                      78020757 samples [reqs]
-`
-
-const osdldiskfsProcContents = `snapshot_time             1438693135.640551 secs.usecs
-get_page                  275132812 samples [usec] 0 3147 1320420955 22041662259
-cache_access              19047063027 samples [pages] 1 1 19047063027
-cache_hit                 7393729777 samples [pages] 1 1 7393729777
-cache_miss                11653333250 samples [pages] 1 1 11653333250
-`
-
-const obdfilterJobStatsContents = `job_stats:
-- job_id:          cluster-testjob1
-  snapshot_time:   1461772761
-  read_bytes:      { samples:           1, unit: bytes, min:    4096, max:    4096, sum:            4096 }
-  write_bytes:     { samples:          25, unit: bytes, min: 1048576, max:16777216, sum:        26214400 }
-  getattr:         { samples:           0, unit:  reqs }
-  setattr:         { samples:           0, unit:  reqs }
-  punch:           { samples:           1, unit:  reqs }
-  sync:            { samples:           0, unit:  reqs }
-  destroy:         { samples:           0, unit:  reqs }
-  create:          { samples:           0, unit:  reqs }
-  statfs:          { samples:           0, unit:  reqs }
-  get_info:        { samples:           0, unit:  reqs }
-  set_info:        { samples:           0, unit:  reqs }
-  quotactl:        { samples:           0, unit:  reqs }
-- job_id:          testjob2
-  snapshot_time:   1461772761
-  read_bytes:      { samples:           1, unit: bytes, min:    1024, max:    1024, sum:            1024 }
-  write_bytes:     { samples:          25, unit: bytes, min:    2048, max:    2048, sum:           51200 }
-  getattr:         { samples:           0, unit:  reqs }
-  setattr:         { samples:           0, unit:  reqs }
-  punch:           { samples:           1, unit:  reqs }
-  sync:            { samples:           0, unit:  reqs }
-  destroy:         { samples:           0, unit:  reqs }
-  create:          { samples:           0, unit:  reqs }
-  statfs:          { samples:           0, unit:  reqs }
-  get_info:        { samples:           0, unit:  reqs }
-  set_info:        { samples:           0, unit:  reqs }
-  quotactl:        { samples:           0, unit:  reqs }
-`
-
-const mdtProcContents = `snapshot_time             1438693238.20113 secs.usecs
-open                      1024577037 samples [reqs]
-close                     873243496 samples [reqs]
-mknod                     349042 samples [reqs]
-link                      445 samples [reqs]
-unlink                    3549417 samples [reqs]
-mkdir                     705499 samples [reqs]
-rmdir                     227434 samples [reqs]
-rename                    629196 samples [reqs]
-getattr                   1503663097 samples [reqs]
-setattr                   1898364 samples [reqs]
-getxattr                  6145349681 samples [reqs]
-setxattr                  83969 samples [reqs]
-statfs                    2916320 samples [reqs]
-sync                      434081 samples [reqs]
-samedir_rename            259625 samples [reqs]
-crossdir_rename           369571 samples [reqs]
-`
-
-const mdtJobStatsContents = `job_stats:
-- job_id:          cluster-testjob1
-  snapshot_time:   1461772761
-  open:            { samples:           5, unit:  reqs }
-  close:           { samples:           4, unit:  reqs }
-  mknod:           { samples:           6, unit:  reqs }
-  link:            { samples:           8, unit:  reqs }
-  unlink:          { samples:          90, unit:  reqs }
-  mkdir:           { samples:         521, unit:  reqs }
-  rmdir:           { samples:         520, unit:  reqs }
-  rename:          { samples:           9, unit:  reqs }
-  getattr:         { samples:          11, unit:  reqs }
-  setattr:         { samples:           1, unit:  reqs }
-  getxattr:        { samples:           3, unit:  reqs }
-  setxattr:        { samples:           4, unit:  reqs }
-  statfs:          { samples:        1205, unit:  reqs }
-  sync:            { samples:           2, unit:  reqs }
-  samedir_rename:  { samples:         705, unit:  reqs }
-  crossdir_rename: { samples:         200, unit:  reqs }
-- job_id:          testjob2
-  snapshot_time:   1461772761
-  open:            { samples:           6, unit:  reqs }
-  close:           { samples:           7, unit:  reqs }
-  mknod:           { samples:           8, unit:  reqs }
-  link:            { samples:           9, unit:  reqs }
-  unlink:          { samples:          20, unit:  reqs }
-  mkdir:           { samples:         200, unit:  reqs }
-  rmdir:           { samples:         210, unit:  reqs }
-  rename:          { samples:           8, unit:  reqs }
-  getattr:         { samples:          10, unit:  reqs }
-  setattr:         { samples:           2, unit:  reqs }
-  getxattr:        { samples:           4, unit:  reqs }
-  setxattr:        { samples:           5, unit:  reqs }
-  statfs:          { samples:        1207, unit:  reqs }
-  sync:            { samples:           3, unit:  reqs }
-  samedir_rename:  { samples:         706, unit:  reqs }
-  crossdir_rename: { samples:         201, unit:  reqs }
-`
-
-func TestLustre2GeneratesMetrics(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "telegraf-lustre")
+/*
+ * Description: Create parent temporary folder which will be holding input
+ *              data used by test-case
+ *
+ * @t: Reference to testutil
+ * @folderName: Parent folder name
+ *
+ * Output: On success return path
+ *         On Failure exit program
+ */
+func makeTempDir(t *testing.T, folderName string) (string) {
+	tmpDir, err := os.MkdirTemp("", folderName)
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
+	return tmpDir
+}
 
-	tempdir := tmpDir + "/telegraf/proc/fs/lustre/"
-	ostName := "OST0001"
+/*
+ * Test: TestLustre2LnetMetrics
+ * Purpose: Verify /sys/kernel/debug/lnet/stats
+ * TestFolder: testcases/TestLustre2LnetMetrics
+ * InputFile: lnetProcContents.out
+ * Example:
+ *   # cat /sys/kernel/debug/lnet/stats
+ *   0 6 0 1420 1420 0 0 1004048 1004048 0 0
+ */
+func TestLustre2LnetMetrics(t *testing.T) {
+	/* Read testcases/TestLustre2LnetMetrics folder */
+	data := ReadDir(t, "testcases", "TestLustre2LnetMetrics",
+			"lnetProcContents.out")
 
-	mdtdir := tempdir + "/mdt/"
-	err = os.MkdirAll(mdtdir+"/"+ostName, 0750)
+	 /* create stats file under temp folder */
+	tmpDir := makeTempDir(t, "telegraf-lustre")
+	tempdir := tmpDir + "/telegraf/sys/kernel/debug/"
+	lnetdir := tempdir + "/lnet"
+	err := os.MkdirAll(lnetdir, 0750)
 	require.NoError(t, err)
 
-	osddir := tempdir + "/osd-ldiskfs/"
-	err = os.MkdirAll(osddir+"/"+ostName, 0750)
+	/* write values read from testcases/lnet/expected.out under stats */
+	err = os.WriteFile(lnetdir + "/stats", []byte(data), 0640)
 	require.NoError(t, err)
 
-	obddir := tempdir + "/obdfilter/"
-	err = os.MkdirAll(obddir+"/"+ostName, 0750)
-	require.NoError(t, err)
-
-	err = os.WriteFile(mdtdir+"/"+ostName+"/md_stats", []byte(mdtProcContents), 0640)
-	require.NoError(t, err)
-
-	err = os.WriteFile(osddir+"/"+ostName+"/stats", []byte(osdldiskfsProcContents), 0640)
-	require.NoError(t, err)
-
-	err = os.WriteFile(obddir+"/"+ostName+"/stats", []byte(obdfilterProcContents), 0640)
-	require.NoError(t, err)
-
-	// Begin by testing standard Lustre stats
 	m := &Lustre2{
-		OstProcfiles: []string{obddir + "/*/stats", osddir + "/*/stats"},
-		MdsProcfiles: []string{mdtdir + "/*/md_stats"},
+		LnetProcfiles: []string{lnetdir + "/stats"},
 	}
 
 	var acc testutil.Accumulator
-
+	/* Get Actual Value to verify. Call Gather() method to read actual
+	 * data. In this case it will read from temporary file created above
+	 */
 	err = m.Gather(&acc)
 	require.NoError(t, err)
 
 	tags := map[string]string{
-		"name": ostName,
+		"name":   "lnet",
 	}
 
+	/* Expected Value */
 	fields := map[string]interface{}{
-		"cache_access":    uint64(19047063027),
-		"cache_hit":       uint64(7393729777),
-		"cache_miss":      uint64(11653333250),
-		"close":           uint64(873243496),
-		"crossdir_rename": uint64(369571),
-		"getattr":         uint64(1503663097),
-		"getxattr":        uint64(6145349681),
-		"link":            uint64(445),
-		"mkdir":           uint64(705499),
-		"mknod":           uint64(349042),
-		"open":            uint64(1024577037),
-		"read_bytes":      uint64(78026117632000),
-		"read_calls":      uint64(203238095),
-		"rename":          uint64(629196),
-		"rmdir":           uint64(227434),
-		"samedir_rename":  uint64(259625),
-		"setattr":         uint64(1898364),
-		"setxattr":        uint64(83969),
-		"statfs":          uint64(2916320),
-		"sync":            uint64(434081),
-		"unlink":          uint64(3549417),
-		"write_bytes":     uint64(15201500833981),
-		"write_calls":     uint64(71893382),
+		"lnet_msgs_alloc":      uint64(0),
+		"lnet_msgs_max":        uint64(7),
+		"lnet_rst_alloc":       uint64(0),
+		"lnet_send_count":      uint64(20481),
+		"lnet_recv_count":      uint64(28239),
+		"lnet_route_count":     uint64(0),
+		"lnet_drop_count":      uint64(0),
+		"lnet_send_length":     uint64(8892268623),
+		"lnet_recv_length":     uint64(8225856),
+		"lnet_route_length":    uint64(0),
+		"lnet_drop_length":     uint64(0),
 	}
-
+	/* Verify for fields against "lustre2" measurement */
 	acc.AssertContainsTaggedFields(t, "lustre2", fields, tags)
 }
 
-func TestLustre2GeneratesClientMetrics(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "telegraf-lustre-client")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
-
-	tempdir := tmpDir + "/telegraf/proc/fs/lustre/"
-	ostName := "OST0001"
-	clientName := "10.2.4.27@o2ib1"
-	mdtdir := tempdir + "/mdt/"
-	err = os.MkdirAll(mdtdir+"/"+ostName+"/exports/"+clientName, 0750)
-	require.NoError(t, err)
-
-	obddir := tempdir + "/obdfilter/"
-	err = os.MkdirAll(obddir+"/"+ostName+"/exports/"+clientName, 0750)
-	require.NoError(t, err)
-
-	err = os.WriteFile(mdtdir+"/"+ostName+"/exports/"+clientName+"/stats", []byte(mdtProcContents), 0640)
-	require.NoError(t, err)
-
-	err = os.WriteFile(obddir+"/"+ostName+"/exports/"+clientName+"/stats", []byte(obdfilterProcContents), 0640)
-	require.NoError(t, err)
-
-	// Begin by testing standard Lustre stats
-	m := &Lustre2{
-		OstProcfiles: []string{obddir + "/*/exports/*/stats"},
-		MdsProcfiles: []string{mdtdir + "/*/exports/*/stats"},
-	}
-
-	var acc testutil.Accumulator
-
-	err = m.Gather(&acc)
-	require.NoError(t, err)
-
-	tags := map[string]string{
-		"name":   ostName,
-		"client": clientName,
-	}
-
-	fields := map[string]interface{}{
-		"close":           uint64(873243496),
-		"crossdir_rename": uint64(369571),
-		"getattr":         uint64(1503663097),
-		"getxattr":        uint64(6145349681),
-		"link":            uint64(445),
-		"mkdir":           uint64(705499),
-		"mknod":           uint64(349042),
-		"open":            uint64(1024577037),
-		"read_bytes":      uint64(78026117632000),
-		"read_calls":      uint64(203238095),
-		"rename":          uint64(629196),
-		"rmdir":           uint64(227434),
-		"samedir_rename":  uint64(259625),
-		"setattr":         uint64(1898364),
-		"setxattr":        uint64(83969),
-		"statfs":          uint64(2916320),
-		"sync":            uint64(434081),
-		"unlink":          uint64(3549417),
-		"write_bytes":     uint64(15201500833981),
-		"write_calls":     uint64(71893382),
-	}
-
-	acc.AssertContainsTaggedFields(t, "lustre2", fields, tags)
-}
-
+/*
+ * Test: TestLustre2GeneratesJobstatsMetrics
+ * Purpose: Verify /proc/fs/lustre/mdt/lustre-MDT0000/job_stats
+ *          Verify /proc/fs/lustre/obdfilter/lustre-OST0000/job_stats
+ * TestFolder: testcases/TestLustre2GeneratesJobstatsMetrics
+ * InputFile: mdtJobStatsContents.out
+ * InputFile: obdfilterJobStatsContents.out
+ */
 func TestLustre2GeneratesJobstatsMetrics(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "telegraf-lustre-jobstats")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	/* Read testcases/TestLustre2GeneratesJobstatsMetrics folder */
+	data := ReadDir(t, "testcases",
+			"TestLustre2GeneratesJobstatsMetrics",
+			"mdtJobStatsContents.out")
+	data1 := ReadDir(t, "testcases",
+			"TestLustre2GeneratesJobstatsMetrics",
+			"obdfilterJobStatsContents.out")
 
+	tmpDir := makeTempDir(t, "telegraf-lustre-jobstats")
 	tempdir := tmpDir + "/telegraf/proc/fs/lustre/"
 	ostName := "OST0001"
 	jobNames := []string{"cluster-testjob1", "testjob2"}
 
 	mdtdir := tempdir + "/mdt/"
-	err = os.MkdirAll(mdtdir+"/"+ostName, 0750)
+	err := os.MkdirAll(mdtdir+"/"+ostName, 0750)
 	require.NoError(t, err)
 
 	obddir := tempdir + "/obdfilter/"
 	err = os.MkdirAll(obddir+"/"+ostName, 0750)
 	require.NoError(t, err)
 
-	err = os.WriteFile(mdtdir+"/"+ostName+"/job_stats", []byte(mdtJobStatsContents), 0640)
+	err = os.WriteFile(mdtdir+"/"+ostName+"/job_stats", []byte(data), 0640)
 	require.NoError(t, err)
 
-	err = os.WriteFile(obddir+"/"+ostName+"/job_stats", []byte(obdfilterJobStatsContents), 0640)
+	err = os.WriteFile(obddir+"/"+ostName+"/job_stats", []byte(data1), 0640)
 	require.NoError(t, err)
 
 	// Test Lustre Jobstats
@@ -392,22 +245,192 @@ func TestLustre2GeneratesJobstatsMetrics(t *testing.T) {
 	}
 
 	for index := 0; index < len(fields); index++ {
-		acc.AssertContainsTaggedFields(t, "lustre2", fields[index], tags[index])
+		acc.AssertContainsTaggedFields(t, "lustre2", fields[index],
+					       tags[index])
 	}
 }
 
-func TestLustre2CanParseConfiguration(t *testing.T) {
-	config := []byte(`
-[[inputs.lustre2]]
-   ost_procfiles = [
-     "/proc/fs/lustre/obdfilter/*/stats",
-     "/proc/fs/lustre/osd-ldiskfs/*/stats",
-   ]
-   mds_procfiles = [
-     "/proc/fs/lustre/mdt/*/md_stats",
-   ]`)
+/*
+ * Test: TestLustre2GeneratesClientMetrics
+ * Purpose: Verify /proc/fs/lustre/mdt/lustre-MDT0000/exports/0\@lo/stats
+ *          Verify /proc/fs/lustre/obdfilter/lustre-OST0000/exports/0\@lo/stats
+ * TestFolder: testcases/TestLustre2GeneratesClientMetrics
+ * InputFile: mdtProcContents.out
+ * InputFile: obdfilterProcContents.out
+ */
+func TestLustre2GeneratesClientMetrics(t *testing.T) {
+	data := ReadDir(t, "testcases",
+			"TestLustre2GeneratesClientMetrics",
+			"mdtProcContents.out")
+	data1 := ReadDir(t, "testcases",
+			"TestLustre2GeneratesClientMetrics",
+			"obdfilterProcContents.out")
+	tmpDir := makeTempDir(t, "telegraf-lustre-client")
 
-	table, err := toml.Parse(config)
+	tempdir := tmpDir + "/telegraf/proc/fs/lustre/"
+	ostName := "OST0001"
+	clientName := "10.2.4.27@o2ib1"
+	mdtdir := tempdir + "/mdt/"
+	err := os.MkdirAll(mdtdir+"/"+ostName+"/exports/"+clientName, 0750)
+	require.NoError(t, err)
+
+	obddir := tempdir + "/obdfilter/"
+	err = os.MkdirAll(obddir+"/"+ostName+"/exports/"+clientName, 0750)
+	require.NoError(t, err)
+
+	err = os.WriteFile(mdtdir+"/"+ostName+"/exports/"+clientName+"/stats",
+			   []byte(data), 0640)
+	require.NoError(t, err)
+
+	err = os.WriteFile(obddir+"/"+ostName+"/exports/"+clientName+"/stats",
+			   []byte(data1), 0640)
+	require.NoError(t, err)
+
+	// Begin by testing standard Lustre stats
+	m := &Lustre2{
+		OstProcfiles: []string{obddir + "/*/exports/*/stats"},
+		MdsProcfiles: []string{mdtdir + "/*/exports/*/stats"},
+	}
+
+	var acc testutil.Accumulator
+
+	err = m.Gather(&acc)
+	require.NoError(t, err)
+
+	tags := map[string]string{
+		"name":   ostName,
+		"client": clientName,
+	}
+
+	fields := map[string]interface{}{
+		"close":           uint64(873243496),
+		"crossdir_rename": uint64(369571),
+		"getattr":         uint64(1503663097),
+		"getxattr":        uint64(6145349681),
+		"link":            uint64(445),
+		"mkdir":           uint64(705499),
+		"mknod":           uint64(349042),
+		"open":            uint64(1024577037),
+		"read_bytes":      uint64(78026117632000),
+		"read_calls":      uint64(203238095),
+		"rename":          uint64(629196),
+		"rmdir":           uint64(227434),
+		"samedir_rename":  uint64(259625),
+		"setattr":         uint64(1898364),
+		"setxattr":        uint64(83969),
+		"statfs":          uint64(2916320),
+		"sync":            uint64(434081),
+		"unlink":          uint64(3549417),
+		"write_bytes":     uint64(15201500833981),
+		"write_calls":     uint64(71893382),
+	}
+
+	acc.AssertContainsTaggedFields(t, "lustre2", fields, tags)
+}
+
+/*
+ * Test: TestLustre2GeneratesMetrics
+ * Purpose: Verify /proc/fs/lustre/mdt/lustre-MDT0000/md_stats
+ *          Verify /proc/fs/lustre/obdfilter/lustre-OST0000/stats
+ *          Verify /sys/kernel/debug/lustre/osd-ldiskfs/lustre-OST0000/stats
+ * TestFolder: testcases/TestLustre2GeneratesMetrics
+ * InputFile: mdtProcContents.out
+ * InputFile: osdldiskfsProcContents.out
+ * InputFile: obdfilterProcContents.out
+ */
+func TestLustre2GeneratesMetrics(t *testing.T) {
+	data := ReadDir(t, "testcases",
+			"TestLustre2GeneratesMetrics",
+			"mdtProcContents.out")
+	data1 := ReadDir(t, "testcases",
+			"TestLustre2GeneratesMetrics",
+			"osdldiskfsProcContents.out")
+	data2 := ReadDir(t, "testcases",
+			"TestLustre2GeneratesMetrics",
+			"obdfilterProcContents.out")
+	tmpDir := makeTempDir(t, "telegraf-lustre")
+
+	tempdir := tmpDir + "/telegraf/proc/fs/lustre/"
+	ostName := "OST0001"
+
+	mdtdir := tempdir + "/mdt/"
+	err := os.MkdirAll(mdtdir+"/"+ostName, 0750)
+	require.NoError(t, err)
+
+	osddir := tempdir + "/osd-ldiskfs/"
+	err = os.MkdirAll(osddir+"/"+ostName, 0750)
+	require.NoError(t, err)
+
+	obddir := tempdir + "/obdfilter/"
+	err = os.MkdirAll(obddir+"/"+ostName, 0750)
+	require.NoError(t, err)
+
+	err = os.WriteFile(mdtdir+"/"+ostName+"/md_stats",
+			   []byte(data), 0640)
+	require.NoError(t, err)
+
+	err = os.WriteFile(osddir+"/"+ostName+"/stats",
+			   []byte(data1), 0640)
+	require.NoError(t, err)
+
+	err = os.WriteFile(obddir+"/"+ostName+"/stats",
+			   []byte(data2), 0640)
+	require.NoError(t, err)
+
+	// Begin by testing standard Lustre stats
+	m := &Lustre2{
+		OstProcfiles: []string{obddir + "/*/stats", osddir + "/*/stats"},
+		MdsProcfiles: []string{mdtdir + "/*/md_stats"},
+	}
+	var acc testutil.Accumulator
+
+	err = m.Gather(&acc)
+	require.NoError(t, err)
+
+	tags := map[string]string{
+		"name": ostName,
+	}
+
+	fields := map[string]interface{}{
+		"cache_access":    uint64(19047063027),
+		"cache_hit":       uint64(7393729777),
+		"cache_miss":      uint64(11653333250),
+		"close":           uint64(873243496),
+		"crossdir_rename": uint64(369571),
+		"getattr":         uint64(1503663097),
+		"getxattr":        uint64(6145349681),
+		"link":            uint64(445),
+		"mkdir":           uint64(705499),
+		"mknod":           uint64(349042),
+		"open":            uint64(1024577037),
+		"read_bytes":      uint64(78026117632000),
+		"read_calls":      uint64(203238095),
+		"rename":          uint64(629196),
+		"rmdir":           uint64(227434),
+		"samedir_rename":  uint64(259625),
+		"setattr":         uint64(1898364),
+		"setxattr":        uint64(83969),
+		"statfs":          uint64(2916320),
+		"sync":            uint64(434081),
+		"unlink":          uint64(3549417),
+		"write_bytes":     uint64(15201500833981),
+		"write_calls":     uint64(71893382),
+	}
+
+	acc.AssertContainsTaggedFields(t, "lustre2", fields, tags)
+}
+
+/*
+ * Test: TestLustre2CanParseConfiguration
+ * Purpose: Verify Config file can be read correctly
+ * TestFolder: testcases/TestLustre2CanParseConfiguration
+ * InputFile: config.out
+ */
+func TestLustre2CanParseConfiguration(t *testing.T) {
+	data := ReadDir(t, "testcases",
+			"TestLustre2CanParseConfiguration",
+			"config.out")
+	table, err := toml.Parse(data)
 	require.NoError(t, err)
 
 	inputs, ok := table.Fields["inputs"]
@@ -418,7 +441,8 @@ func TestLustre2CanParseConfiguration(t *testing.T) {
 
 	var plugin Lustre2
 
-	require.NoError(t, toml.UnmarshalTable(lustre2.([]*ast.Table)[0], &plugin))
+	require.NoError(t, toml.UnmarshalTable(lustre2.([]*ast.Table)[0],
+					       &plugin))
 
 	require.Equal(t, Lustre2{
 		OstProcfiles: []string{
@@ -428,5 +452,9 @@ func TestLustre2CanParseConfiguration(t *testing.T) {
 		MdsProcfiles: []string{
 			"/proc/fs/lustre/mdt/*/md_stats",
 		},
+		LnetProcfiles: []string{
+			"/sys/kernel/debug/lnet/stats",
+		},
 	}, plugin)
 }
+

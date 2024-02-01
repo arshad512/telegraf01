@@ -1,0 +1,11 @@
+[[inputs.lustre2]]
+   ost_procfiles = [
+     "/proc/fs/lustre/obdfilter/*/stats",
+     "/proc/fs/lustre/osd-ldiskfs/*/stats",
+   ]
+   mds_procfiles = [
+     "/proc/fs/lustre/mdt/*/md_stats",
+   ]
+   lnet_procfiles = [
+     "/sys/kernel/debug/lnet/stats",
+   ]

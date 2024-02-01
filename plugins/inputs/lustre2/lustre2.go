@@ -26,23 +26,24 @@ type tags struct {
 	name, job, client string
 }
 
-// Lustre proc files can change between versions, so we want to future-proof
-// by letting people choose what to look at.
+/* Lustre proc files can change between versions, so we want to future-proof
+ * by letting people choose what to look at.
+ */
 type Lustre2 struct {
 	OstProcfiles []string `toml:"ost_procfiles"`
 	MdsProcfiles []string `toml:"mds_procfiles"`
+	/* lnet specific metrics */
+	LnetProcfiles []string `toml:"lnet_procfiles"`
 
 	// allFields maps and OST name to the metric fields associated with that OST
 	allFields map[tags]map[string]interface{}
 }
 
 /*
-	The wanted fields would be a []string if not for the
-
-lines that start with read_bytes/write_bytes and contain
-
-	both the byte count and the function call count
-*/
+ * The wanted fields would be a []string if not for the
+ * lines that start with read_bytes/write_bytes and contain
+ * both the byte count and the function call count
+ */
 type mapping struct {
 	inProc   string // What to look for at the start of a line in /proc/fs/lustre/*
 	field    uint32 // which field to extract from that line
@@ -81,8 +82,9 @@ var wantedOstFields = []*mapping{
 	},
 }
 
+/* The read line has several fields, we need to differentiate what they are */
 var wantedOstJobstatsFields = []*mapping{
-	{ // The read line has several fields, so we need to differentiate what they are
+	{
 		inProc:   "read",
 		field:    3,
 		reportAs: "jobstats_read_calls",
@@ -348,6 +350,73 @@ var wantedMdtJobstatsFields = []*mapping{
 	},
 }
 
+/* lnet stats file (/sys/kernel/debug/lnet/stats) is a single line file
+ * with no headers or labels so we hard set inProc as "lnet" to use the
+ * current function with little modification
+ */
+var wantedLnetFields = []*mapping{
+	{
+	        inProc:   "lnet",
+		field:    0,
+		reportAs: "lnet_msgs_alloc",
+	},
+	{
+	        inProc:   "lnet",
+		field:    1,
+		reportAs: "lnet_msgs_max",
+	},
+	{
+	        inProc:   "lnet",
+		field:    2,
+		reportAs: "lnet_rst_alloc",
+	},
+	{
+	        inProc:   "lnet",
+		field:    3,
+		reportAs: "lnet_send_count",
+	},
+	{
+	        inProc:   "lnet",
+		field:    4,
+		reportAs: "lnet_recv_count",
+	},
+	{
+	        inProc:   "lnet",
+		field:    5,
+		reportAs: "lnet_route_count",
+	},
+	{
+	        inProc:   "lnet",
+		field:    6,
+		reportAs: "lnet_drop_count",
+	},
+	{
+	        inProc:   "lnet",
+		field:    7,
+		reportAs: "lnet_send_length",
+	},
+	{
+	        inProc:   "lnet",
+		field:    8,
+		reportAs: "lnet_recv_length",
+	},
+	{
+	        inProc:   "lnet",
+		field:    9,
+		reportAs: "lnet_route_length",
+	},
+	{
+	        inProc:   "lnet",
+		field:    10,
+		reportAs: "lnet_drop_length",
+	},
+}
+
+/*
+ * Called when generating the config file. Example:
+ * $./telegraf -sample-config -input-filter lustre2 -output-filter influxdb \
+ *  --debug > telegraf.lustre2.conf
+ */
 func (*Lustre2) SampleConfig() string {
 	return sampleConfig
 }
@@ -359,7 +428,6 @@ func (l *Lustre2) GetLustreProcStats(fileglob string, wantedFields []*mapping) e
 	}
 
 	fieldSplitter := regexp.MustCompile(`[ :]+`)
-
 	for _, file := range files {
 		/* From /proc/fs/lustre/obdfilter/<ost_name>/stats and similar
 		 * extract the object store target name,
@@ -376,11 +444,17 @@ func (l *Lustre2) GetLustreProcStats(fileglob string, wantedFields []*mapping) e
 		if strings.Contains(file, "/exports/") {
 			name = path[len(path)-4]
 			client = path[len(path)-2]
+		} else if strings.Contains(file, "/lnet/") {
+			/* We do not derive anything and hard-code here as
+			 * "/sys/kernel/debug/lnet/stats" is just single line
+			 * numeric stats output
+			 */
+			name = "lnet"
+			client = ""
 		} else {
 			name = path[len(path)-2]
 			client = ""
 		}
-
 		wholeFile, err := os.ReadFile(file)
 		if err != nil {
 			return err
@@ -390,14 +464,16 @@ func (l *Lustre2) GetLustreProcStats(fileglob string, wantedFields []*mapping) e
 			lines := strings.Split(job, "\n")
 			jobid := ""
 
-			// figure out if the data should be tagged with job_id here
+			/* figure out if the data should be tagged with job_id
+			 * here
+			 */
 			parts := strings.Fields(lines[0])
 			if strings.TrimSuffix(parts[0], ":") == "job_id" {
 				jobid = parts[1]
 			}
 
 			for _, line := range lines {
-				// skip any empty lines
+				/* skip any empty lines */
 				if len(line) < 1 {
 					continue
 				}
@@ -408,21 +484,38 @@ func (l *Lustre2) GetLustreProcStats(fileglob string, wantedFields []*mapping) e
 				}
 
 				var fields map[string]interface{}
-				fields, ok := l.allFields[tags{name, jobid, client}]
+				fields, ok := l.allFields[tags{name, jobid,
+							client}]
 				if !ok {
 					fields = make(map[string]interface{})
-					l.allFields[tags{name, jobid, client}] = fields
+					l.allFields[tags{name, jobid,
+						    client}] = fields
 				}
 
 				for _, wanted := range wantedFields {
 					var data uint64
 					if parts[0] == wanted.inProc {
 						wantedField := wanted.field
-						// if not set, assume field[1]. Shouldn't be field[0], as
-						// that's a string
+						/* if not set, assume field[1].
+						 * Shouldn't be field[0], as
+						 * that's a string
+						 */
 						if wantedField == 0 {
 							wantedField = 1
 						}
+						data, err = strconv.ParseUint(strings.TrimSuffix(parts[wantedField], ","), 10, 64)
+						if err != nil {
+							return err
+						}
+						reportName := wanted.inProc
+						if wanted.reportAs != "" {
+							reportName = wanted.reportAs
+						}
+						fields[reportName] = data
+					}
+
+					if wanted.inProc == name {
+						wantedField := wanted.field
 						data, err = strconv.ParseUint(strings.TrimSuffix(parts[wantedField], ","), 10, 64)
 						if err != nil {
 							return err
@@ -440,23 +533,28 @@ func (l *Lustre2) GetLustreProcStats(fileglob string, wantedFields []*mapping) e
 	return nil
 }
 
-// Gather reads stats from all lustre targets
+/* Gather reads stats from all lustre targets
+ * Is called every time the plugin invlokes to pick up and store data
+ */
 func (l *Lustre2) Gather(acc telegraf.Accumulator) error {
 	l.allFields = make(map[tags]map[string]interface{})
 
 	if len(l.OstProcfiles) == 0 {
 		// read/write bytes are in obdfilter/<ost_name>/stats
-		err := l.GetLustreProcStats("/proc/fs/lustre/obdfilter/*/stats", wantedOstFields)
+		err := l.GetLustreProcStats("/proc/fs/lustre/obdfilter/*/stats",
+					    wantedOstFields)
 		if err != nil {
 			return err
 		}
 		// cache counters are in osd-ldiskfs/<ost_name>/stats
-		err = l.GetLustreProcStats("/proc/fs/lustre/osd-ldiskfs/*/stats", wantedOstFields)
+		err = l.GetLustreProcStats("/proc/fs/lustre/osd-ldiskfs/*/stats",
+					   wantedOstFields)
 		if err != nil {
 			return err
 		}
 		// per job statistics are in obdfilter/<ost_name>/job_stats
-		err = l.GetLustreProcStats("/proc/fs/lustre/obdfilter/*/job_stats", wantedOstJobstatsFields)
+		err = l.GetLustreProcStats("/proc/fs/lustre/obdfilter/*/job_stats",
+					   wantedOstJobstatsFields)
 		if err != nil {
 			return err
 		}
@@ -464,13 +562,32 @@ func (l *Lustre2) Gather(acc telegraf.Accumulator) error {
 
 	if len(l.MdsProcfiles) == 0 {
 		// Metadata server stats
-		err := l.GetLustreProcStats("/proc/fs/lustre/mdt/*/md_stats", wantedMdsFields)
+		err := l.GetLustreProcStats("/proc/fs/lustre/mdt/*/md_stats",
+					    wantedMdsFields)
 		if err != nil {
 			return err
 		}
 
 		// Metadata target job stats
-		err = l.GetLustreProcStats("/proc/fs/lustre/mdt/*/job_stats", wantedMdtJobstatsFields)
+		err = l.GetLustreProcStats("/proc/fs/lustre/mdt/*/job_stats",
+					   wantedMdtJobstatsFields)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(l.LnetProcfiles) == 0 {
+		/* Due to default debugfs directory permissions reading the
+		 * lnet stats file as a  non-root user is not possible.
+		 * Modifying systemd:sys-kernel-debug.mount to add an options
+		 * line "Options=uid=0,gid=$(id -g telegraf),mode=0750" followed
+		 * by running 'systemctl daemon-reload' and
+		 * 'systemctl restart sys-kernel-debug.mount' enables lnet
+		 * metrics monitoring without running telegraf as root, which
+		 * seems like a bigger security exposure.
+		 */
+		err := l.GetLustreProcStats("/sys/kernel/debug/lnet/stats",
+					    wantedLnetFields)
 		if err != nil {
 			return err
 		}
@@ -492,6 +609,14 @@ func (l *Lustre2) Gather(acc telegraf.Accumulator) error {
 			mdtFields = wantedMdtJobstatsFields
 		}
 		err := l.GetLustreProcStats(procfile, mdtFields)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, procfile := range l.LnetProcfiles {
+		lnetFields := wantedLnetFields
+		err := l.GetLustreProcStats(procfile, lnetFields)
 		if err != nil {
 			return err
 		}

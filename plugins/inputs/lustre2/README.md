@@ -35,6 +35,9 @@ See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
   #   "/proc/fs/lustre/mdt/*/job_stats",
   #   "/proc/fs/lustre/mdt/*/exports/*/stats",
   # ]
+  # lnet_procfiles = [
+  #   "/sys/kernel/debug/lnet/stats",
+  # ]
 ```
 
 ## Metrics
@@ -163,6 +166,22 @@ From `/proc/fs/lustre/mdt/*/job_stats`:
     - jobstats_sync
     - jobstats_unlink
 
+From `/sys/kernel/debug/lnet/stats`:
+
+- lustre2
+  - fields:
+    - msgs_alloc
+    - msgs_max
+    - rst_alloc
+    - send_count
+    - recv_count
+    - route_count
+    - drop_count
+    - send_length
+    - recv_length
+    - route_length
+    - drop_length
+
 ## Troubleshooting
 
 Check for the default or custom procfiles in the proc filesystem, and reference
@@ -175,6 +194,7 @@ corresponding to the above metric fields.
 ```text
 lustre2,host=oss2,jobid=42990218,name=wrk-OST0041 jobstats_ost_setattr=0i,jobstats_ost_sync=0i,jobstats_punch=0i,jobstats_read_bytes=4096i,jobstats_read_calls=1i,jobstats_read_max_size=4096i,jobstats_read_min_size=4096i,jobstats_write_bytes=310206488i,jobstats_write_calls=7423i,jobstats_write_max_size=53048i,jobstats_write_min_size=8820i 1556525847000000000
 lustre2,host=mds1,jobid=42992017,name=wrk-MDT0000 jobstats_close=31798i,jobstats_crossdir_rename=0i,jobstats_getattr=34146i,jobstats_getxattr=15i,jobstats_link=0i,jobstats_mkdir=658i,jobstats_mknod=0i,jobstats_open=31797i,jobstats_rename=0i,jobstats_rmdir=0i,jobstats_samedir_rename=0i,jobstats_setattr=1788i,jobstats_setxattr=0i,jobstats_statfs=0i,jobstats_sync=0i,jobstats_unlink=0i 1556525828000000000
+lustre2,host=centos79,name=lnet lnet_msgs_max=6i,lnet_recv_count=37896i,lnet_drop_count=0i,lnet_drop_length=0i,lnet_send_length=9782288i,lnet_recv_length=9782288i,lnet_route_length=0i,lnet_msgs_alloc=0i,lnet_rst_alloc=0i,lnet_send_count=37896i,lnet_route_count=0i 1706761880000000000
 ```
 
 [lustre]: http://lustre.org/
